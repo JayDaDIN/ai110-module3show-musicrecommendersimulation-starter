@@ -1,4 +1,12 @@
-from src.recommender import Song, UserProfile, Recommender
+from pathlib import Path
+
+from src.recommender import (
+    Recommender,
+    Song,
+    UserProfile,
+    load_songs,
+    recommend_songs,
+)
 
 def make_small_recommender() -> Recommender:
     songs = [
@@ -59,3 +67,32 @@ def test_explain_recommendation_returns_non_empty_string():
     explanation = rec.explain_recommendation(user, song)
     assert isinstance(explanation, str)
     assert explanation.strip() != ""
+
+
+def test_load_songs_reads_csv_data():
+    csv_path = Path(__file__).parents[1] / "data" / "songs.csv"
+
+    songs = load_songs(str(csv_path))
+
+    assert songs
+    assert isinstance(songs[0]["id"], int)
+    assert isinstance(songs[0]["energy"], float)
+
+
+def test_functional_recommender_ranks_matching_song_first():
+    songs = load_songs(str(Path(__file__).parents[1] / "data" / "songs.csv"))
+    preferences = {
+        "genre": "rock",
+        "mood": "intense",
+        "target_energy": 0.9,
+        "target_tempo_bpm": 150,
+        "target_valence": 0.5,
+        "target_danceability": 0.65,
+        "target_acousticness": 0.1,
+    }
+
+    recommendations = recommend_songs(preferences, songs, k=3)
+
+    assert len(recommendations) == 3
+    assert recommendations[0][0]["title"] == "Storm Runner"
+    assert recommendations[0][1] > recommendations[1][1]
