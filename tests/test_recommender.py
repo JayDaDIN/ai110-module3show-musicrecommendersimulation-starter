@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from src.recommender import (
     Recommender,
     Song,
@@ -7,6 +9,7 @@ from src.recommender import (
     load_songs,
     recommend_songs,
 )
+from src.main import USER_PROFILES
 
 def make_small_recommender() -> Recommender:
     songs = [
@@ -96,3 +99,54 @@ def test_functional_recommender_ranks_matching_song_first():
     assert len(recommendations) == 3
     assert recommendations[0][0]["title"] == "Storm Runner"
     assert recommendations[0][1] > recommendations[1][1]
+
+
+def test_all_sample_profiles_return_ranked_recommendations():
+    songs = load_songs(str(Path(__file__).parents[1] / "data" / "songs.csv"))
+
+    for preferences in USER_PROFILES.values():
+        recommendations = recommend_songs(preferences, songs, k=5)
+
+        assert len(recommendations) == 5
+        scores = [score for _, score, _ in recommendations]
+        assert scores == sorted(scores, reverse=True)
+        assert all(0.0 <= score <= 100.0 for score in scores)
+
+
+def test_distinct_profiles_surface_expected_top_tracks():
+    songs = load_songs(str(Path(__file__).parents[1] / "data" / "songs.csv"))
+    expected_top_tracks = {
+        "High-Energy Pop": "Daybreak Parade",
+        "Chill Lofi": "Library Rain",
+        "Deep Intense Rock": "Storm Runner",
+    }
+
+    for profile_name, expected_title in expected_top_tracks.items():
+        recommendations = recommend_songs(USER_PROFILES[profile_name], songs, k=5)
+
+        assert recommendations[0][0]["title"] == expected_title
+
+
+def test_sparse_and_unseen_profile_preferences_are_supported():
+    songs = load_songs(str(Path(__file__).parents[1] / "data" / "songs.csv"))
+
+    sparse_results = recommend_songs(
+        USER_PROFILES["Sparse Case-Insensitive Genre"], songs, k=3
+    )
+    unseen_results = recommend_songs(
+        USER_PROFILES["Unseen Genre and Mood"], songs, k=3
+    )
+
+    assert all(song["genre"] == "pop" for song, _, _ in sparse_results)
+    assert unseen_results[0][1] > 0
+    assert all(
+        "genre match" not in reasons and "mood match" not in reasons
+        for _, _, reasons in unseen_results
+    )
+
+
+def test_recommender_rejects_profile_without_supported_preferences():
+    songs = load_songs(str(Path(__file__).parents[1] / "data" / "songs.csv"))
+
+    with pytest.raises(ValueError, match="at least one supported feature"):
+        recommend_songs({}, songs)
